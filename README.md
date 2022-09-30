@@ -10,9 +10,10 @@ See `requirements.txt`.
 
 It uses the following environment variables:
 
-- `FRESHCHAT_API_URL`: `https://example.freshchat.com/v2`
+- `FRESHCHAT_API_URL`: `https://api.freshchat.com/v2/`
 - `FRESHCHAT_APP_ID`: Under "Integration Settings"
 - `FRESHCHAT_PUBLIC_KEY`: See https://support.freshchat.com/en/support/solutions/articles/239404-freshchat-webhooks-payload-structure-and-authentication
+  If using `docker-compose`, make sure to set the environmental variable as `"FRESHCHAT_PUBLIC_KEY=-----BEGIN RSA PUBLIC KEY-----\n[...]\n-----END RSA PUBLIC KEY-----"`
 - `FRESHCHAT_TOKEN`: See https://support.freshchat.com/en/support/solutions/articles/50000000011-api-tokens
 - `MATTERMOST_API_URL`: `https://example.mattermost.com/api/v4`
 - `MATTERMOST_BOT_TOKEN`: The personal access token for the bot, see https://developers.mattermost.com/integrate/reference/bot-accounts/
