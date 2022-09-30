@@ -23,6 +23,7 @@ It uses the following environment variables:
 ## Notes
 
 Set `FLASK_RUN_HOST` and `FLASK_RUN_PORT` to control the listening host/port.
+If using `entrypoint.sh`, edit the `-b 0.0.0.0:80` to change the listening host/port.
 
 ## Service Setup
 
