@@ -3,10 +3,12 @@ import datetime
 import json
 import os
 import requests
-from Crypto.Signature import pkcs1_15
-from Crypto.Hash import SHA256
-from Crypto.PublicKey import RSA
-from flask import Flask, request
+import sys
+from Crypto.Signature import pkcs1_15  # type: ignore
+from Crypto.Hash import SHA256  # type: ignore
+from Crypto.PublicKey import RSA  # type: ignore
+from flask import Flask, request  # type: ignore
+from typing import Tuple
 
 FRESHCHAT_API_URL = os.environ['FRESHCHAT_API_URL']
 FRESHCHAT_APP_ID = os.environ['FRESHCHAT_APP_ID']
@@ -156,6 +158,11 @@ def create_app(test_config=None):
     #      }
     #    }
     # }
+
+    @app.route('/', methods=['GET'])
+    def do_nothing() -> Tuple[str, int]:
+        print("Nothing to see here...", file=sys.stderr)
+        return 'err', 404
 
     @app.route('/freshchat', methods=['POST'])
     def freshchat():
