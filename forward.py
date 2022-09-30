@@ -8,7 +8,7 @@ from Crypto.Signature import pkcs1_15  # type: ignore
 from Crypto.Hash import SHA256  # type: ignore
 from Crypto.PublicKey import RSA  # type: ignore
 from flask import Flask, request  # type: ignore
-from typing import Tuple
+from typing import Callable, Dict, List, Tuple
 
 FRESHCHAT_API_URL = os.environ['FRESHCHAT_API_URL']
 FRESHCHAT_APP_ID = os.environ['FRESHCHAT_APP_ID']
@@ -20,6 +20,17 @@ MATTERMOST_SLASH_TOKEN = os.environ['MATTERMOST_SLASH_TOKEN']
 MATTERMOST_CHANNEL_ID = os.environ['MATTERMOST_CHANNEL_ID']
 
 freshchat_public_key = RSA.import_key(FRESHCHAT_PUBLIC_KEY)
+
+# Utility function for partitioning.
+def partition_list_str(lst: List[str], pred: Callable[[str], bool]) -> Tuple[List[str], List[str]]:
+    yes: List[str] = []
+    no: List[str] = []
+    for d in lst:
+        if pred(d):
+            yes.append(d)
+        else:
+            no.append(d)
+    return (yes, no)
 
 # Returns the Response object as defined in the requests library (not Flask)
 def freshchat_get_user(user_id):
@@ -94,10 +105,32 @@ def format_freshchat_user(user):
     s += 'posted:\n'
     return s
 
+def parse_mattermost_command(raw_text: str, raw_user_name: str) -> Tuple[str, str, str]:
+    """
+    Parse a Mattermost slash command in the form of
+    "<convo id> [!!as:...] rest of message"
+    :return: convo_id, message, user_name
+    """
+    # Parse the raw text
+    words = raw_text.strip().split(" ")
+    if len(words) < 2:
+        raise ValueError("Bad command syntax")
+    convo_id = words[0]
+    special_words, message_words = partition_list_str(words[1:], pred=lambda x: x.startswith("!!"))
+    message = " ".join(message_words)
+
+    # Handle the as command
+    user_name = raw_user_name
+    as_lst = list(filter(lambda x: x.startswith("!!as:"), special_words))
+    if len(as_lst) > 0:
+        user_name = as_lst[0].removeprefix("!!as:")
+
+    return convo_id, message, user_name
+
 def create_app(test_config=None):
     app = Flask(__name__)
 
-    def get_agents():
+    def get_agents() -> List[dict]:
         resp = freshchat_get('/agents')
         if resp.status_code != 200:
             app.logger.error(f'When retrieving Freshchat agents, got {resp.status_code}')
@@ -111,21 +144,21 @@ def create_app(test_config=None):
                 app.logger.error(f'When retrieving Freshchat agents with pagination, got {resp.status_code}')
         return resp['agents']
 
-    def get_mattermost_users():
+    def get_mattermost_users() -> List[dict]:
         resp = mattermost_get('/users')
         return resp.json()
 
-    def map_users_to_agents():
+    def map_usernames_to_agents() -> Dict[str, str]:
         users = get_mattermost_users()
         agents = get_agents()
-        mapping = {}
+        mapping: Dict[str, str] = {}
         for agent in agents:
             for user in users:
                 if user['email'] == agent['email']:
-                    mapping[user['id']] = agent['id']
+                    mapping[user['username']] = agent['id']
         return mapping
 
-    mapping = map_users_to_agents()
+    usernames_to_agents = map_usernames_to_agents()
 
     # {
     #   "actor": {
@@ -193,7 +226,7 @@ def create_app(test_config=None):
             text = part.get('text')
             if text != None:
                 msg += text['content'] + '\n'
-        msg += f'To respond, enter /freshchat {conversation_id} <text>.'
+        msg += f'To respond, enter /freshchat {conversation_id} [!!as:<username>] <text>.'
         resp = mattermost_create_post(MATTERMOST_CHANNEL_ID, msg)
         if resp.status_code == 201:
             return 'ok', 201
@@ -203,21 +236,23 @@ def create_app(test_config=None):
             return 'err', 500
 
     @app.route('/mattermost', methods=['POST'])
-    def mattermost():
+    def mattermost() -> Tuple[str, int]:
         token = request.form.get('token')
         if token == None:
             return 'err', 401
         if token != MATTERMOST_SLASH_TOKEN:
             return 'err', 403
-        user_id = request.form['user_id']
-        text = request.form['text']
-        idx = text.find(' ')
-        if idx == -1:
-            return 'Bad command syntax.', 400
-        convo_id = text[:idx]
-        message = text[idx+1:]
+        raw_user_name = request.form['user_name']
+        raw_text = str(request.form['text'])
+
+        app.logger.error(f"mattermost: raw_text = {raw_text}")
+
+        parsing = parse_mattermost_command(raw_text = raw_text, raw_user_name = raw_user_name)
+        app.logger.error(f"mattermost: parsing = {parsing}")
+        convo_id, message, user_name = parsing
+
         try:
-            actor_id = mapping[user_id]
+            actor_id = usernames_to_agents[user_name]
             resp = create_freshchat_message(convo_id, actor_id, message)
             # Responding with 201 Created causes Mattermost to think there was
             # an error. How come the Mattermost API gets to give me a 201, but
