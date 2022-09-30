@@ -138,7 +138,7 @@ def create_app(test_config=None):
         count = resp['pagination']['total_items']
         if count != len(resp['agents']):
             resp = freshchat_get('/agents', data={
-                items_per_page: count
+                'items_per_page': count
             })
             if resp.status_code != 200:
                 app.logger.error(f'When retrieving Freshchat agents with pagination, got {resp.status_code}')
